@@ -1,0 +1,1581 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>✋ 手势画图</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0f0f13;
+      color: #fff;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    #app { display: flex; flex-direction: column; height: 100vh; }
+
+    /* ── Top bar ── */
+    #topbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 14px;
+      background: rgba(255,255,255,0.05);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      z-index: 20;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    #topbar h1 {
+      font-size: 16px; font-weight: 700;
+      background: linear-gradient(135deg, #a78bfa, #60a5fa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-right: 4px; white-space: nowrap;
+    }
+    .sep { width: 1px; height: 24px; background: rgba(255,255,255,0.15); flex-shrink: 0; }
+
+    /* ── Color swatches ── */
+    #color-palette { display: flex; gap: 5px; align-items: center; }
+    .swatch {
+      width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform 0.15s, border-color 0.15s;
+    }
+    .swatch:hover { transform: scale(1.2); }
+    .swatch.active { border-color: #fff; transform: scale(1.25); }
+    #custom-color-wrap { position: relative; display: flex; align-items: center; }
+    #custom-color-btn {
+      width: 24px; height: 24px; border-radius: 50%;
+      border: 2px dashed rgba(255,255,255,0.5);
+      background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
+      cursor: pointer; transition: transform 0.15s;
+    }
+    #custom-color-btn:hover { transform: scale(1.2); }
+    #color-input { position: absolute; opacity: 0; width: 0; height: 0; }
+
+    /* ── Brush size ── */
+    #brush-wrap { display: flex; align-items: center; gap: 6px; }
+    #brush-wrap label { font-size: 12px; color: rgba(255,255,255,0.6); }
+    #brush-size {
+      -webkit-appearance: none; width: 70px; height: 4px;
+      border-radius: 4px; background: rgba(255,255,255,0.2); outline: none; cursor: pointer;
+    }
+    #brush-size::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 14px; height: 14px;
+      border-radius: 50%; background: #a78bfa; cursor: pointer;
+    }
+    #brush-preview { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; }
+    #brush-dot { border-radius: 50%; background: #fff; transition: width 0.1s, height 0.1s; }
+
+    /* ── Tool buttons ── */
+    .tool-btn {
+      display: flex; align-items: center; gap: 5px;
+      padding: 5px 12px; border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.8); font-size: 12px;
+      cursor: pointer; transition: background 0.15s, border-color 0.15s; white-space: nowrap;
+    }
+    .tool-btn:hover { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.3); }
+    .tool-btn.active { background: rgba(167,139,250,0.25); border-color: #a78bfa; color: #fff; }
+    .tool-btn.danger:hover { background: rgba(239,68,68,0.25); border-color: #ef4444; color: #fca5a5; }
+
+    /* ── Mode buttons ── */
+    .mode-btn {
+      padding: 5px 12px; border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.7); font-size: 12px;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .mode-btn:hover { background: rgba(255,255,255,0.12); }
+    .mode-btn.active {
+      background: rgba(167,139,250,0.3);
+      border-color: #a78bfa; color: #fff; font-weight: 600;
+    }
+
+    /* ── Status badge ── */
+    #status {
+      margin-left: auto; display: flex; align-items: center; gap: 6px;
+      font-size: 11px; color: rgba(255,255,255,0.5);
+    }
+    #status-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; transition: background 0.3s; }
+    #status-dot.ready { background: #22c55e; }
+    #status-dot.loading { background: #f59e0b; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    /* ── Canvas area ── */
+    #canvas-area { position: relative; flex: 1; overflow: hidden; }
+
+    #drawing-canvas {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%; z-index: 2;
+    }
+    #drawing-canvas.mode-brush { cursor: crosshair; }
+    #drawing-canvas.mode-fill   { cursor: pointer; }
+    #drawing-canvas.mode-eraser { cursor: cell; }
+    #drawing-canvas.mode-sticker { cursor: grab; }
+    #drawing-canvas.mode-none   { cursor: none; }
+
+    #webcam {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%;
+      object-fit: cover; transform: scaleX(-1);
+      z-index: 0; opacity: 0; transition: opacity 0.5s;
+    }
+    #webcam.visible { opacity: 1; }
+
+    #overlay-canvas {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%; z-index: 3; pointer-events: none;
+    }
+
+    /* ── Loading overlay ── */
+    #loading-overlay {
+      position: absolute; inset: 0;
+      background: rgba(15,15,19,0.92);
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+      z-index: 50; transition: opacity 0.5s;
+    }
+    #loading-overlay.hidden { opacity: 0; pointer-events: none; }
+    #loading-overlay .spinner {
+      width: 48px; height: 48px;
+      border: 3px solid rgba(167,139,250,0.2);
+      border-top-color: #a78bfa;
+      border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading-overlay p { font-size: 14px; color: rgba(255,255,255,0.6); }
+
+    /* ── Cursor ── */
+    #cursor {
+      position: absolute; width: 24px; height: 24px;
+      border-radius: 50%; border: 2px solid rgba(255,255,255,0.8);
+      transform: translate(-50%, -50%);
+      pointer-events: none; z-index: 10;
+      transition: width 0.1s, height 0.1s, background 0.1s;
+      display: none;
+    }
+    #cursor.drawing { background: rgba(255,255,255,0.3); }
+
+    /* ── Gesture hint ── */
+    #gesture-hint {
+      position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.6); backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.1); border-radius: 12px;
+      padding: 10px 18px; font-size: 13px; color: rgba(255,255,255,0.7);
+      z-index: 10; text-align: center; pointer-events: none;
+      transition: opacity 0.5s;
+    }
+    #gesture-hint span { margin: 0 8px; }
+
+    /* ── Gesture status ── */
+    #gesture-status {
+      position: absolute; top: 70px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.15); border-radius: 16px;
+      padding: 8px 20px; font-size: 15px; color: #fff;
+      z-index: 10; pointer-events: none;
+      display: flex; align-items: center; gap: 10px;
+    }
+    #gesture-status .icon { font-size: 22px; line-height: 1; }
+    #gesture-status .label { font-weight: 600; min-width: 48px; }
+    #gesture-status .detail { font-size: 12px; color: rgba(255,255,255,0.5); }
+
+    /* ── Debug panel ── */
+    #debug-panel {
+      position: absolute; top: 70px; right: 12px;
+      background: rgba(0,0,0,0.65); backdrop-filter: blur(6px);
+      border: 1px solid rgba(255,255,255,0.1); border-radius: 10px;
+      padding: 10px 14px; font-size: 11px; color: rgba(255,255,255,0.6);
+      z-index: 10; pointer-events: none; line-height: 1.8;
+      font-family: 'SF Mono', 'Menlo', monospace;
+    }
+    #debug-panel .val { color: #a78bfa; }
+    #debug-panel .on  { color: #4ade80; }
+    #debug-panel .off { color: #f87171; }
+
+    /* ── Bottom buttons ── */
+    #bottom-left { position: absolute; bottom: 16px; left: 16px; z-index: 10; display: flex; gap: 8px; }
+
+    /* ═══════════════════════════════════════════════════════════
+       Sticker panel
+       ═══════════════════════════════════════════════════════════ */
+    #sticker-panel {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(15,15,20,0.95);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 20px; padding: 20px;
+      z-index: 40; display: none;
+      width: 480px; max-width: 90vw; max-height: 80vh; overflow-y: auto;
+    }
+    #sticker-panel.open { display: block; }
+    #sticker-panel h3 { font-size: 16px; font-weight: 700; margin-bottom: 14px; color: #fff; }
+    #sticker-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .sticker-item {
+      aspect-ratio: 1;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 14px;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, transform 0.15s;
+      padding: 8px;
+    }
+    .sticker-item:hover {
+      background: rgba(167,139,250,0.15);
+      border-color: rgba(167,139,250,0.4);
+      transform: scale(1.05);
+    }
+    .sticker-item svg { width: 64px; height: 64px; }
+    .sticker-item .name { margin-top: 6px; font-size: 11px; color: rgba(255,255,255,0.6); }
+    #sticker-close {
+      position: absolute; top: 12px; right: 14px;
+      background: none; border: none;
+      color: rgba(255,255,255,0.5); font-size: 20px; cursor: pointer;
+      transition: color 0.15s;
+    }
+    #sticker-close:hover { color: #fff; }
+
+    #sticker-backdrop {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 35; display: none;
+    }
+    #sticker-backdrop.open { display: block; }
+
+    /* ── Sticker placement overlay ── */
+    #sticker-placement {
+      position: absolute; inset: 0; z-index: 15;
+      display: none; cursor: grab;
+    }
+    #sticker-placement.active { display: block; }
+    #sticker-placement.dragging { cursor: grabbing; }
+    #sticker-canvas {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+    }
+
+    /* Sticker control bar */
+    #sticker-controls {
+      position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
+      display: none; gap: 10px; align-items: center; z-index: 16;
+      background: rgba(0,0,0,0.75); backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 16px; padding: 8px 16px;
+    }
+    #sticker-controls.active { display: flex; }
+    #sticker-controls label { font-size: 12px; color: rgba(255,255,255,0.6); white-space: nowrap; }
+    #sticker-size-slider {
+      -webkit-appearance: none; width: 120px; height: 4px;
+      border-radius: 4px; background: rgba(255,255,255,0.2); outline: none; cursor: pointer;
+    }
+    #sticker-size-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 16px; height: 16px;
+      border-radius: 50%; background: #a78bfa; cursor: pointer;
+    }
+    .sticker-ctrl-btn {
+      padding: 6px 14px; border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.8); font-size: 12px;
+      cursor: pointer; transition: all 0.15s; white-space: nowrap;
+    }
+    .sticker-ctrl-btn:hover { background: rgba(255,255,255,0.12); }
+    .sticker-ctrl-btn.confirm { background: rgba(74,222,128,0.2); border-color: #4ade80; color: #4ade80; }
+    .sticker-ctrl-btn.confirm:hover { background: rgba(74,222,128,0.35); }
+    .sticker-ctrl-btn.cancel { background: rgba(248,113,113,0.2); border-color: #f87171; color: #f87171; }
+    .sticker-ctrl-btn.cancel:hover { background: rgba(248,113,113,0.35); }
+  </style>
+</head>
+<body>
+
+<div id="app">
+  <!-- Toolbar -->
+  <div id="topbar">
+    <h1>✋ 手势画图</h1>
+    <div class="sep"></div>
+
+    <!-- Mode buttons -->
+    <button class="mode-btn active" id="mode-brush" title="画笔模式">✏️ 画笔</button>
+    <button class="mode-btn" id="mode-fill" title="涂色模式">🪣 涂色</button>
+    <button class="mode-btn" id="mode-eraser" title="橡皮擦 (握拳)">✊ 橡皮擦</button>
+
+    <div class="sep"></div>
+
+    <!-- Color palette -->
+    <div id="color-palette">
+      <div class="swatch active" style="background:#ffffff" data-color="#ffffff"></div>
+      <div class="swatch" style="background:#f87171" data-color="#f87171"></div>
+      <div class="swatch" style="background:#fb923c" data-color="#fb923c"></div>
+      <div class="swatch" style="background:#facc15" data-color="#facc15"></div>
+      <div class="swatch" style="background:#4ade80" data-color="#4ade80"></div>
+      <div class="swatch" style="background:#22d3ee" data-color="#22d3ee"></div>
+      <div class="swatch" style="background:#60a5fa" data-color="#60a5fa"></div>
+      <div class="swatch" style="background:#a78bfa" data-color="#a78bfa"></div>
+      <div class="swatch" style="background:#f472b6" data-color="#f472b6"></div>
+      <div class="swatch" style="background:#a3a3a3" data-color="#a3a3a3"></div>
+      <div class="swatch" style="background:#000000;border:1px solid rgba(255,255,255,0.3)" data-color="#000000"></div>
+      <div id="custom-color-wrap">
+        <div id="custom-color-btn" title="自定义颜色"></div>
+        <input type="color" id="color-input" value="#ffffff" />
+      </div>
+    </div>
+
+    <div class="sep"></div>
+
+    <!-- Brush size -->
+    <div id="brush-wrap">
+      <label>粗细</label>
+      <input type="range" id="brush-size" min="2" max="40" value="6" />
+      <div id="brush-preview"><div id="brush-dot" style="width:6px;height:6px"></div></div>
+    </div>
+
+    <div class="sep"></div>
+
+    <!-- Sticker panel -->
+    <button class="tool-btn" id="sticker-btn">🎨 简笔画</button>
+
+    <!-- Clear -->
+    <button class="tool-btn danger" id="clear-btn">🗑️ 清空</button>
+
+    <!-- Save -->
+    <button class="tool-btn" id="save-btn">💾 保存</button>
+
+    <!-- Camera bg -->
+    <button class="tool-btn" id="cam-toggle-btn">📷 摄像头</button>
+
+    <!-- Status -->
+    <div id="status">
+      <div id="status-dot" class="loading"></div>
+      <span id="status-text">正在加载…</span>
+    </div>
+  </div>
+
+  <!-- Canvas area -->
+  <div id="canvas-area">
+    <div id="loading-overlay">
+      <div class="spinner"></div>
+      <p id="loading-msg">正在初始化手部追踪…</p>
+    </div>
+
+    <video id="webcam" playsinline autoplay muted></video>
+    <canvas id="drawing-canvas" class="mode-brush"></canvas>
+    <canvas id="overlay-canvas"></canvas>
+
+    <!-- Sticker placement layer -->
+    <div id="sticker-placement">
+      <canvas id="sticker-canvas"></canvas>
+    </div>
+    <div id="sticker-controls">
+      <label>大小</label>
+      <input type="range" id="sticker-size-slider" min="50" max="500" value="200" />
+      <button class="sticker-ctrl-btn cancel" id="sticker-cancel-btn">✕ 取消</button>
+      <button class="sticker-ctrl-btn confirm" id="sticker-confirm-btn">✓ 确认放置</button>
+    </div>
+
+    <div id="gesture-status">
+      <span class="icon" id="gesture-icon">✋</span>
+      <span class="label" id="gesture-label">等待检测</span>
+      <span class="detail" id="gesture-detail"></span>
+    </div>
+
+    <div id="debug-panel">
+      <div>食指: <span class="val" id="dbg-index">—</span></div>
+      <div>中指: <span class="val" id="dbg-middle">—</span></div>
+      <div>无名: <span class="val" id="dbg-ring">—</span></div>
+      <div>小指: <span class="val" id="dbg-pinky">—</span></div>
+      <div>手势: <span class="val" id="dbg-gesture">—</span></div>
+    </div>
+
+    <div id="cursor"></div>
+
+    <div id="gesture-hint">
+      <span>✏️ 鼠标直接画</span>
+      <span>☝️ 伸出食指 → 画图</span>
+      <span>✊ 握拳 → 橡皮擦</span>
+      <span>🪣 涂色模式 → 点击填充</span>
+    </div>
+
+    <!-- Bottom left buttons -->
+    <div id="bottom-left">
+      <button class="tool-btn" id="undo-action-btn">↩ 撤销</button>
+    </div>
+
+    <!-- Sticker panel -->
+    <div id="sticker-backdrop"></div>
+    <div id="sticker-panel">
+      <button id="sticker-close">✕</button>
+      <h3>🎨 选择简笔画</h3>
+      <div id="sticker-grid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MediaPipe CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  State
+// ═══════════════════════════════════════════════════════════
+const state = {
+  color: '#ffffff',
+  brushSize: 6,
+  mode: 'brush',   // 'brush' | 'fill' | 'eraser' | 'sticker'
+  isDrawing: false,
+  mouseDown: false,
+  showCamera: false,
+  lastX: null,
+  lastY: null,
+  undoStack: [],
+  MAX_UNDO: 30,
+};
+
+// Sticker placement state
+const stickerState = {
+  active: false,
+  index: -1,
+  x: 0,
+  y: 0,
+  size: 200,
+  dragging: false,
+  dragOffsetX: 0,
+  dragOffsetY: 0,
+  img: null,       // pre-loaded Image object
+  coloredImg: null,
+};
+
+// ═══════════════════════════════════════════════════════════
+//  DOM refs
+// ═══════════════════════════════════════════════════════════
+const video          = document.getElementById('webcam');
+const drawCanvas     = document.getElementById('drawing-canvas');
+const overlayCanvas  = document.getElementById('overlay-canvas');
+const drawCtx        = drawCanvas.getContext('2d', { willReadFrequently: true });
+const overlayCtx     = overlayCanvas.getContext('2d');
+const cursor         = document.getElementById('cursor');
+const loadingOverlay = document.getElementById('loading-overlay');
+const loadingMsg     = document.getElementById('loading-msg');
+const statusDot      = document.getElementById('status-dot');
+const statusText     = document.getElementById('status-text');
+const gestureHint    = document.getElementById('gesture-hint');
+const brushSizeInput = document.getElementById('brush-size');
+const brushDot       = document.getElementById('brush-dot');
+const clearBtn       = document.getElementById('clear-btn');
+const saveBtn        = document.getElementById('save-btn');
+const camToggleBtn   = document.getElementById('cam-toggle-btn');
+const undoBtn        = document.getElementById('undo-action-btn');
+const colorInput     = document.getElementById('color-input');
+const stickerBtn     = document.getElementById('sticker-btn');
+const stickerPanel   = document.getElementById('sticker-panel');
+const stickerBackdrop= document.getElementById('sticker-backdrop');
+const stickerClose   = document.getElementById('sticker-close');
+const stickerGrid    = document.getElementById('sticker-grid');
+const modeBrushBtn   = document.getElementById('mode-brush');
+const modeFillBtn    = document.getElementById('mode-fill');
+const modeEraserBtn  = document.getElementById('mode-eraser');
+
+// Sticker placement refs
+const stickerPlacement = document.getElementById('sticker-placement');
+const stickerCanvas    = document.getElementById('sticker-canvas');
+const stickerCtx       = stickerCanvas.getContext('2d');
+const stickerControls  = document.getElementById('sticker-controls');
+const stickerSizeSlider = document.getElementById('sticker-size-slider');
+const stickerConfirmBtn = document.getElementById('sticker-confirm-btn');
+const stickerCancelBtn  = document.getElementById('sticker-cancel-btn');
+
+// Debug refs
+const dbgIndex  = document.getElementById('dbg-index');
+const dbgMiddle = document.getElementById('dbg-middle');
+const dbgRing   = document.getElementById('dbg-ring');
+const dbgPinky  = document.getElementById('dbg-pinky');
+const dbgGesture = document.getElementById('dbg-gesture');
+const gestureIcon   = document.getElementById('gesture-icon');
+const gestureLabel  = document.getElementById('gesture-label');
+const gestureDetail = document.getElementById('gesture-detail');
+
+// ═══════════════════════════════════════════════════════════
+//  Canvas resize
+// ═══════════════════════════════════════════════════════════
+function resizeCanvases() {
+  const area = document.getElementById('canvas-area');
+  const w = area.clientWidth;
+  const h = area.clientHeight;
+  const tmp = document.createElement('canvas');
+  tmp.width = w; tmp.height = h;
+  tmp.getContext('2d').drawImage(drawCanvas, 0, 0);
+  drawCanvas.width = w; drawCanvas.height = h;
+  overlayCanvas.width = w; overlayCanvas.height = h;
+  stickerCanvas.width = w; stickerCanvas.height = h;
+  drawCtx.drawImage(tmp, 0, 0);
+  if (stickerState.active) renderStickerPreview();
+}
+window.addEventListener('resize', resizeCanvases);
+resizeCanvases();
+
+// ═══════════════════════════════════════════════════════════
+//  Undo
+// ═══════════════════════════════════════════════════════════
+function saveUndoState() {
+  if (state.undoStack.length >= state.MAX_UNDO) state.undoStack.shift();
+  state.undoStack.push(drawCtx.getImageData(0, 0, drawCanvas.width, drawCanvas.height));
+}
+function undo() {
+  if (state.undoStack.length === 0) return;
+  drawCtx.putImageData(state.undoStack.pop(), 0, 0);
+}
+undoBtn.addEventListener('click', undo);
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
+});
+
+// ═══════════════════════════════════════════════════════════
+//  Mode switching
+// ═══════════════════════════════════════════════════════════
+function setMode(mode) {
+  state.mode = mode;
+  modeBrushBtn.classList.toggle('active', mode === 'brush');
+  modeFillBtn.classList.toggle('active', mode === 'fill');
+  modeEraserBtn.classList.toggle('active', mode === 'eraser');
+  drawCanvas.className = 'mode-' + mode;
+}
+modeBrushBtn.addEventListener('click', () => setMode('brush'));
+modeFillBtn.addEventListener('click', () => setMode('fill'));
+modeEraserBtn.addEventListener('click', () => setMode('eraser'));
+
+// ═══════════════════════════════════════════════════════════
+//  Drawing logic
+// ═══════════════════════════════════════════════════════════
+function drawLine(x, y, beginNew) {
+  const isEraser = state.mode === 'eraser';
+  const size = isEraser ? state.brushSize * 3 : state.brushSize;
+  drawCtx.lineWidth = size;
+  drawCtx.lineCap = 'round';
+  drawCtx.lineJoin = 'round';
+  drawCtx.strokeStyle = isEraser ? 'rgba(0,0,0,1)' : state.color;
+  drawCtx.globalCompositeOperation = isEraser ? 'destination-out' : 'source-over';
+
+  if (beginNew || state.lastX === null) {
+    drawCtx.beginPath();
+    drawCtx.moveTo(x, y);
+    drawCtx.lineTo(x + 0.1, y + 0.1);
+    drawCtx.stroke();
+  } else {
+    drawCtx.lineTo(x, y);
+    drawCtx.stroke();
+  }
+  state.lastX = x;
+  state.lastY = y;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Flood fill (coloring)
+// ═══════════════════════════════════════════════════════════
+function floodFill(startX, startY, fillColor) {
+  const w = drawCanvas.width;
+  const h = drawCanvas.height;
+  if (startX < 0 || startX >= w || startY < 0 || startY >= h) return;
+
+  const imageData = drawCtx.getImageData(0, 0, w, h);
+  const data = imageData.data;
+
+  const tmp = document.createElement('canvas');
+  tmp.width = 1; tmp.height = 1;
+  const tc = tmp.getContext('2d');
+  tc.fillStyle = fillColor;
+  tc.fillRect(0, 0, 1, 1);
+  const fd = tc.getImageData(0, 0, 1, 1).data;
+  const fr = fd[0], fg = fd[1], fb = fd[2], fa = fd[3];
+
+  const idx = (startY * w + startX) * 4;
+  const tr = data[idx], tg = data[idx + 1], tb = data[idx + 2], ta = data[idx + 3];
+
+  if (tr === fr && tg === fg && tb === fb && ta === fa) return;
+
+  const tolerance = 30;
+  function match(i) {
+    return Math.abs(data[i] - tr) <= tolerance &&
+           Math.abs(data[i + 1] - tg) <= tolerance &&
+           Math.abs(data[i + 2] - tb) <= tolerance &&
+           Math.abs(data[i + 3] - ta) <= tolerance;
+  }
+
+  const stack = [[startX, startY]];
+  const visited = new Uint8Array(w * h);
+
+  while (stack.length > 0) {
+    const [cx, cy] = stack.pop();
+    const pi = cy * w + cx;
+    if (visited[pi]) continue;
+    const ci = pi * 4;
+    if (!match(ci)) continue;
+
+    visited[pi] = 1;
+    data[ci] = fr;
+    data[ci + 1] = fg;
+    data[ci + 2] = fb;
+    data[ci + 3] = fa;
+
+    if (cx > 0)     stack.push([cx - 1, cy]);
+    if (cx < w - 1) stack.push([cx + 1, cy]);
+    if (cy > 0)     stack.push([cx, cy - 1]);
+    if (cy < h - 1) stack.push([cx, cy + 1]);
+  }
+
+  drawCtx.putImageData(imageData, 0, 0);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Save image
+// ═══════════════════════════════════════════════════════════
+function saveImage() {
+  // Create a clean export canvas with white background
+  const exportCanvas = document.createElement('canvas');
+  exportCanvas.width = drawCanvas.width;
+  exportCanvas.height = drawCanvas.height;
+  const ctx = exportCanvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+  ctx.drawImage(drawCanvas, 0, 0);
+
+  const link = document.createElement('a');
+  const timestamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+  link.download = 'drawing-' + timestamp + '.png';
+  link.href = exportCanvas.toDataURL('image/png');
+  link.click();
+}
+saveBtn.addEventListener('click', saveImage);
+
+// ═══════════════════════════════════════════════════════════
+//  Mouse / Touch drawing
+// ═══════════════════════════════════════════════════════════
+function getCanvasPos(e) {
+  const rect = drawCanvas.getBoundingClientRect();
+  const scaleX = drawCanvas.width / rect.width;
+  const scaleY = drawCanvas.height / rect.height;
+  let clientX, clientY;
+  if (e.touches && e.touches.length > 0) {
+    clientX = e.touches[0].clientX;
+    clientY = e.touches[0].clientY;
+  } else {
+    clientX = e.clientX;
+    clientY = e.clientY;
+  }
+  return {
+    x: (clientX - rect.left) * scaleX,
+    y: (clientY - rect.top) * scaleY,
+  };
+}
+
+drawCanvas.addEventListener('mousedown', e => {
+  if (stickerState.active) return; // block drawing while placing sticker
+  const { x, y } = getCanvasPos(e);
+
+  if (state.mode === 'fill') {
+    saveUndoState();
+    floodFill(Math.round(x), Math.round(y), state.color);
+    return;
+  }
+
+  saveUndoState();
+  state.mouseDown = true;
+  state.lastX = null;
+  state.lastY = null;
+  drawLine(x, y, true);
+});
+
+drawCanvas.addEventListener('mousemove', e => {
+  if (!state.mouseDown) return;
+  const { x, y } = getCanvasPos(e);
+  drawLine(x, y, false);
+});
+
+drawCanvas.addEventListener('mouseup', () => {
+  state.mouseDown = false;
+  state.lastX = null;
+  state.lastY = null;
+});
+drawCanvas.addEventListener('mouseleave', () => {
+  state.mouseDown = false;
+  state.lastX = null;
+  state.lastY = null;
+});
+
+// Touch events
+drawCanvas.addEventListener('touchstart', e => {
+  if (stickerState.active) return;
+  e.preventDefault();
+  const { x, y } = getCanvasPos(e);
+  if (state.mode === 'fill') {
+    saveUndoState();
+    floodFill(Math.round(x), Math.round(y), state.color);
+    return;
+  }
+  saveUndoState();
+  state.mouseDown = true;
+  state.lastX = null;
+  state.lastY = null;
+  drawLine(x, y, true);
+}, { passive: false });
+
+drawCanvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (!state.mouseDown) return;
+  const { x, y } = getCanvasPos(e);
+  drawLine(x, y, false);
+}, { passive: false });
+
+drawCanvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  state.mouseDown = false;
+  state.lastX = null;
+  state.lastY = null;
+}, { passive: false });
+
+// ═══════════════════════════════════════════════════════════
+//  Sticker / Simple drawings
+// ═══════════════════════════════════════════════════════════
+const stickers = [
+  {
+    name: '猫',
+    svg: `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <path d="M60 70 L50 30 L80 60" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M140 70 L150 30 L120 60" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+      <ellipse cx="100" cy="115" rx="55" ry="50" fill="none" stroke="currentColor" stroke-width="3"/>
+      <circle cx="78" cy="105" r="6" fill="currentColor"/>
+      <circle cx="122" cy="105" r="6" fill="currentColor"/>
+      <ellipse cx="100" cy="118" rx="4" ry="3" fill="currentColor"/>
+      <path d="M95 125 Q100 132 105 125" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <line x1="100" y1="118" x2="100" y2="124" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M60 112 Q45 108 38 115" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M60 118 Q47 118 40 122" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M140 112 Q155 108 162 115" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M140 118 Q153 118 160 122" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M85 70 Q100 55 115 70" fill="none" stroke="currentColor" stroke-width="2"/>
+    </svg>`
+  },
+  {
+    name: '房子',
+    svg: `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <path d="M30 100 L100 35 L170 100" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+      <rect x="45" y="100" width="110" height="75" fill="none" stroke="currentColor" stroke-width="3"/>
+      <rect x="78" y="130" width="44" height="45" fill="none" stroke="currentColor" stroke-width="3"/>
+      <circle cx="115" cy="155" r="3" fill="currentColor"/>
+      <rect x="55" y="112" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5"/>
+      <line x1="55" y1="123" x2="77" y2="123" stroke="currentColor" stroke-width="2"/>
+      <line x1="66" y1="112" x2="66" y2="134" stroke="currentColor" stroke-width="2"/>
+      <rect x="123" y="112" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5"/>
+      <line x1="123" y1="123" x2="145" y2="123" stroke="currentColor" stroke-width="2"/>
+      <line x1="134" y1="112" x2="134" y2="134" stroke="currentColor" stroke-width="2"/>
+      <rect x="88" y="55" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"/>
+      <line x1="88" y1="67" x2="112" y2="67" stroke="currentColor" stroke-width="1.5"/>
+      <line x1="100" y1="55" x2="100" y2="79" stroke="currentColor" stroke-width="1.5"/>
+    </svg>`
+  },
+  {
+    name: '星星',
+    svg: `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <path d="M100 20 L118 78 L180 78 L130 115 L148 175 L100 140 L52 175 L70 115 L20 78 L82 78 Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+      <circle cx="85" cy="90" r="4" fill="currentColor"/>
+      <path d="M88 100 Q95 106 102 100" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="115" cy="90" r="4" fill="currentColor"/>
+    </svg>`
+  },
+  {
+    name: '花朵',
+    svg: `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <line x1="100" y1="100" x2="100" y2="185" stroke="currentColor" stroke-width="3"/>
+      <path d="M100 145 Q80 135 75 120" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+      <ellipse cx="68" cy="118" rx="14" ry="8" fill="none" stroke="currentColor" stroke-width="2" transform="rotate(-30 68 118)"/>
+      <path d="M100 160 Q120 150 130 138" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+      <ellipse cx="133" cy="135" rx="14" ry="8" fill="none" stroke="currentColor" stroke-width="2" transform="rotate(25 133 135)"/>
+      <circle cx="100" cy="70" r="18" fill="none" stroke="currentColor" stroke-width="2.5"/>
+      <circle cx="72" cy="88" r="18" fill="none" stroke="currentColor" stroke-width="2.5"/>
+      <circle cx="128" cy="88" r="18" fill="none" stroke="currentColor" stroke-width="2.5"/>
+      <circle cx="82" cy="60" r="18" fill="none" stroke="currentColor" stroke-width="2.5"/>
+      <circle cx="118" cy="60" r="18" fill="none" stroke="currentColor" stroke-width="2.5"/>
+      <circle cx="100" cy="78" r="10" fill="currentColor" opacity="0.3"/>
+      <circle cx="100" cy="78" r="6" fill="currentColor"/>
+    </svg>`
+  },
+  {
+    name: '心形',
+    svg: `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <path d="M100 170 Q30 120 30 75 Q30 40 65 40 Q85 40 100 60 Q115 40 135 40 Q170 40 170 75 Q170 120 100 170 Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+    </svg>`
+  },
+  {
+    name: '大树',
+    svg: `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <rect x="88" y="120" width="24" height="65" fill="none" stroke="currentColor" stroke-width="3"/>
+      <circle cx="100" cy="70" r="45" fill="none" stroke="currentColor" stroke-width="3"/>
+      <circle cx="65" cy="90" r="25" fill="none" stroke="currentColor" stroke-width="2.5"/>
+      <circle cx="135" cy="90" r="25" fill="none" stroke="currentColor" stroke-width="2.5"/>
+      <circle cx="100" cy="45" r="25" fill="none" stroke="currentColor" stroke-width="2.5"/>
+    </svg>`
+  },
+  {
+    name: '小鱼',
+    svg: `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="95" cy="100" rx="55" ry="35" fill="none" stroke="currentColor" stroke-width="3"/>
+      <path d="M150 100 L175 75 L175 125 Z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+      <circle cx="68" cy="92" r="6" fill="currentColor"/>
+      <path d="M82 88 Q92 82 102 88" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M80 110 Q90 118 100 110" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M105 95 Q115 90 125 95" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>`
+  },
+  {
+    name: '太阳',
+    svg: `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="100" cy="100" r="30" fill="none" stroke="currentColor" stroke-width="3"/>
+      <line x1="100" y1="20" x2="100" y2="50" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+      <line x1="100" y1="150" x2="100" y2="180" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+      <line x1="20" y1="100" x2="50" y2="100" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+      <line x1="150" y1="100" x2="180" y2="100" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+      <line x1="43" y1="43" x2="64" y2="64" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+      <line x1="136" y1="136" x2="157" y2="157" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+      <line x1="157" y1="43" x2="136" y2="64" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+      <line x1="64" y1="136" x2="43" y2="157" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="88" cy="93" r="4" fill="currentColor"/>
+      <circle cx="112" cy="93" r="4" fill="currentColor"/>
+      <path d="M88 110 Q100 120 112 110" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>`
+  },
+  {
+    name: '月亮',
+    svg: `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <path d="M120 30 Q180 50 180 110 Q180 165 120 180 Q145 160 145 115 Q145 60 120 30 Z" fill="none" stroke="currentColor" stroke-width="3"/>
+      <circle cx="60" cy="55" r="2" fill="currentColor"/>
+      <circle cx="45" cy="80" r="1.5" fill="currentColor"/>
+      <circle cx="70" cy="45" r="1.5" fill="currentColor"/>
+      <circle cx="50" cy="100" r="2" fill="currentColor"/>
+      <circle cx="80" cy="70" r="1" fill="currentColor"/>
+      <circle cx="35" cy="65" r="1" fill="currentColor"/>
+    </svg>`
+  },
+  {
+    name: '兔子',
+    svg: `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="100" cy="130" rx="40" ry="45" fill="none" stroke="currentColor" stroke-width="3"/>
+      <path d="M75 95 Q70 40 80 25 Q90 15 85 50" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+      <path d="M125 95 Q130 40 120 25 Q110 15 115 50" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="85" cy="120" r="5" fill="currentColor"/>
+      <circle cx="115" cy="120" r="5" fill="currentColor"/>
+      <ellipse cx="100" cy="135" rx="4" ry="3" fill="currentColor"/>
+      <path d="M95 142 L100 146 L105 142" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <line x1="100" y1="135" x2="100" y2="142" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M80 128 Q68 125 62 130" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M120 128 Q132 125 138 130" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>`
+  },
+  {
+    name: '蝴蝶',
+    svg: `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <line x1="100" y1="80" x2="100" y2="160" stroke="currentColor" stroke-width="3"/>
+      <path d="M100 80 Q60 40 35 60 Q20 80 50 100 Q65 108 100 90" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+      <path d="M100 80 Q140 40 165 60 Q180 80 150 100 Q135 108 100 90" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+      <path d="M100 100 Q70 110 55 130 Q50 150 75 145 Q90 138 100 110" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+      <path d="M100 100 Q130 110 145 130 Q150 150 125 145 Q110 138 100 110" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+      <path d="M100 80 L88 65 L95 80" fill="none" stroke="currentColor" stroke-width="2"/>
+      <path d="M100 80 L112 65 L105 80" fill="none" stroke="currentColor" stroke-width="2"/>
+    </svg>`
+  },
+  {
+    name: '彩虹',
+    svg: `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <path d="M25 140 Q100 20 175 140" fill="none" stroke="currentColor" stroke-width="2.5"/>
+      <path d="M35 140 Q100 35 165 140" fill="none" stroke="currentColor" stroke-width="2.5"/>
+      <path d="M45 140 Q100 50 155 140" fill="none" stroke="currentColor" stroke-width="2.5"/>
+      <path d="M55 140 Q100 65 145 140" fill="none" stroke="currentColor" stroke-width="2.5"/>
+      <path d="M65 140 Q100 80 135 140" fill="none" stroke="currentColor" stroke-width="2.5"/>
+      <line x1="20" y1="142" x2="180" y2="142" stroke="currentColor" stroke-width="2.5"/>
+    </svg>`
+  },
+];
+
+// Build sticker grid
+stickers.forEach((sticker, i) => {
+  const item = document.createElement('div');
+  item.className = 'sticker-item';
+  item.innerHTML = sticker.svg + `<span class="name">${sticker.name}</span>`;
+  item.addEventListener('click', () => startStickerPlacement(i));
+  stickerGrid.appendChild(item);
+});
+
+// ═══════════════════════════════════════════════════════════
+//  Sticker placement: drag & resize
+// ═══════════════════════════════════════════════════════════
+function loadStickerImage(index) {
+  return new Promise((resolve) => {
+    const sticker = stickers[index];
+    const coloredSvg = sticker.svg.replace(/currentColor/g, state.color);
+    const blob = new Blob([coloredSvg], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(null);
+    };
+    img.src = url;
+  });
+}
+
+function startStickerPlacement(index) {
+  closeStickerPanel();
+  loadStickerImage(index).then(img => {
+    if (!img) return;
+    stickerState.active = true;
+    stickerState.index = index;
+    stickerState.img = img;
+    stickerState.size = Math.min(drawCanvas.width, drawCanvas.height) * 0.4;
+    stickerState.x = (drawCanvas.width - stickerState.size) / 2;
+    stickerState.y = (drawCanvas.height - stickerState.size) / 2;
+    stickerState.dragging = false;
+
+    stickerSizeSlider.value = stickerState.size;
+    stickerPlacement.classList.add('active');
+    stickerControls.classList.add('active');
+    setMode('sticker');
+
+    renderStickerPreview();
+  });
+}
+
+function renderStickerPreview() {
+  stickerCtx.clearRect(0, 0, stickerCanvas.width, stickerCanvas.height);
+  if (!stickerState.active || !stickerState.img) return;
+
+  const s = stickerState.size;
+  const x = stickerState.x;
+  const y = stickerState.y;
+
+  // Semi-transparent preview
+  stickerCtx.globalAlpha = 0.6;
+  stickerCtx.drawImage(stickerState.img, x, y, s, s);
+  stickerCtx.globalAlpha = 1.0;
+
+  // Bounding box
+  stickerCtx.strokeStyle = '#a78bfa';
+  stickerCtx.lineWidth = 2;
+  stickerCtx.setLineDash([6, 4]);
+  stickerCtx.strokeRect(x, y, s, s);
+  stickerCtx.setLineDash([]);
+
+  // Corner handles
+  const handleSize = 10;
+  stickerCtx.fillStyle = '#a78bfa';
+  const corners = [[x, y], [x + s, y], [x, y + s], [x + s, y + s]];
+  for (const [cx, cy] of corners) {
+    stickerCtx.fillRect(cx - handleSize / 2, cy - handleSize / 2, handleSize, handleSize);
+  }
+
+  // Resize handle indicator (bottom-right)
+  stickerCtx.fillStyle = 'rgba(255,255,255,0.5)';
+  stickerCtx.font = '10px sans-serif';
+  stickerCtx.fillText('↘', x + s + 4, y + s + 4);
+}
+
+function confirmSticker() {
+  if (!stickerState.active || !stickerState.img) return;
+  saveUndoState();
+
+  const s = stickerState.size;
+  drawCtx.globalCompositeOperation = 'source-over';
+  drawCtx.globalAlpha = 1.0;
+  drawCtx.drawImage(stickerState.img, stickerState.x, stickerState.y, s, s);
+
+  cancelSticker();
+}
+
+function cancelSticker() {
+  stickerState.active = false;
+  stickerState.img = null;
+  stickerState.index = -1;
+  stickerState.dragging = false;
+  stickerCtx.clearRect(0, 0, stickerCanvas.width, stickerCanvas.height);
+  stickerPlacement.classList.remove('active');
+  stickerPlacement.classList.remove('dragging');
+  stickerControls.classList.remove('active');
+  setMode('brush');
+}
+
+// Sticker placement: mouse events on placement overlay
+stickerPlacement.addEventListener('mousedown', e => {
+  if (!stickerState.active) return;
+  const rect = drawCanvas.getBoundingClientRect();
+  const scaleX = drawCanvas.width / rect.width;
+  const scaleY = drawCanvas.height / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top) * scaleY;
+
+  const s = stickerState.size;
+  // Check if clicking bottom-right corner (resize handle)
+  const handleZone = 25;
+  if (Math.abs(mx - (stickerState.x + s)) < handleZone && Math.abs(my - (stickerState.y + s)) < handleZone) {
+    stickerState.resizing = true;
+    stickerState.dragging = false;
+    return;
+  }
+
+  // Check if inside the sticker (drag)
+  if (mx >= stickerState.x && mx <= stickerState.x + s && my >= stickerState.y && my <= stickerState.y + s) {
+    stickerState.dragging = true;
+    stickerState.resizing = false;
+    stickerState.dragOffsetX = mx - stickerState.x;
+    stickerState.dragOffsetY = my - stickerState.y;
+    stickerPlacement.classList.add('dragging');
+  }
+});
+
+stickerPlacement.addEventListener('mousemove', e => {
+  if (!stickerState.active) return;
+  const rect = drawCanvas.getBoundingClientRect();
+  const scaleX = drawCanvas.width / rect.width;
+  const scaleY = drawCanvas.height / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top) * scaleY;
+
+  if (stickerState.resizing) {
+    // Resize: keep aspect ratio, use distance from top-left corner
+    const dx = mx - stickerState.x;
+    const dy = my - stickerState.y;
+    const newSize = Math.max(30, Math.max(dx, dy));
+    stickerState.size = newSize;
+    stickerSizeSlider.value = Math.min(500, newSize);
+    renderStickerPreview();
+  } else if (stickerState.dragging) {
+    stickerState.x = mx - stickerState.dragOffsetX;
+    stickerState.y = my - stickerState.dragOffsetY;
+    renderStickerPreview();
+  } else {
+    // Update cursor based on position
+    const s = stickerState.size;
+    const handleZone = 25;
+    if (Math.abs(mx - (stickerState.x + s)) < handleZone && Math.abs(my - (stickerState.y + s)) < handleZone) {
+      stickerPlacement.style.cursor = 'nwse-resize';
+    } else if (mx >= stickerState.x && mx <= stickerState.x + s && my >= stickerState.y && my <= stickerState.y + s) {
+      stickerPlacement.style.cursor = 'grab';
+    } else {
+      stickerPlacement.style.cursor = 'default';
+    }
+  }
+});
+
+stickerPlacement.addEventListener('mouseup', () => {
+  stickerState.dragging = false;
+  stickerState.resizing = false;
+  stickerPlacement.classList.remove('dragging');
+});
+
+// Touch support for sticker placement
+stickerPlacement.addEventListener('touchstart', e => {
+  if (!stickerState.active) return;
+  e.preventDefault();
+  const touch = e.touches[0];
+  const rect = drawCanvas.getBoundingClientRect();
+  const scaleX = drawCanvas.width / rect.width;
+  const scaleY = drawCanvas.height / rect.height;
+  const mx = (touch.clientX - rect.left) * scaleX;
+  const my = (touch.clientY - rect.top) * scaleY;
+
+  const s = stickerState.size;
+  const handleZone = 40;
+  if (Math.abs(mx - (stickerState.x + s)) < handleZone && Math.abs(my - (stickerState.y + s)) < handleZone) {
+    stickerState.resizing = true;
+    stickerState.dragging = false;
+  } else if (mx >= stickerState.x && mx <= stickerState.x + s && my >= stickerState.y && my <= stickerState.y + s) {
+    stickerState.dragging = true;
+    stickerState.resizing = false;
+    stickerState.dragOffsetX = mx - stickerState.x;
+    stickerState.dragOffsetY = my - stickerState.y;
+  }
+}, { passive: false });
+
+stickerPlacement.addEventListener('touchmove', e => {
+  if (!stickerState.active) return;
+  e.preventDefault();
+  const touch = e.touches[0];
+  const rect = drawCanvas.getBoundingClientRect();
+  const scaleX = drawCanvas.width / rect.width;
+  const scaleY = drawCanvas.height / rect.height;
+  const mx = (touch.clientX - rect.left) * scaleX;
+  const my = (touch.clientY - rect.top) * scaleY;
+
+  if (stickerState.resizing) {
+    const dx = mx - stickerState.x;
+    const dy = my - stickerState.y;
+    stickerState.size = Math.max(30, Math.max(dx, dy));
+    stickerSizeSlider.value = Math.min(500, stickerState.size);
+    renderStickerPreview();
+  } else if (stickerState.dragging) {
+    stickerState.x = mx - stickerState.dragOffsetX;
+    stickerState.y = my - stickerState.dragOffsetY;
+    renderStickerPreview();
+  }
+}, { passive: false });
+
+stickerPlacement.addEventListener('touchend', e => {
+  e.preventDefault();
+  stickerState.dragging = false;
+  stickerState.resizing = false;
+}, { passive: false });
+
+// Slider for sticker size
+stickerSizeSlider.addEventListener('input', () => {
+  stickerState.size = parseInt(stickerSizeSlider.value);
+  renderStickerPreview();
+});
+
+stickerConfirmBtn.addEventListener('click', confirmSticker);
+stickerCancelBtn.addEventListener('click', cancelSticker);
+
+function openStickerPanel() {
+  if (stickerState.active) cancelSticker();
+  stickerPanel.classList.add('open');
+  stickerBackdrop.classList.add('open');
+}
+function closeStickerPanel() {
+  stickerPanel.classList.remove('open');
+  stickerBackdrop.classList.remove('open');
+}
+
+stickerBtn.addEventListener('click', openStickerPanel);
+stickerClose.addEventListener('click', closeStickerPanel);
+stickerBackdrop.addEventListener('click', closeStickerPanel);
+
+// ═══════════════════════════════════════════════════════════
+//  Gesture detection
+// ═══════════════════════════════════════════════════════════
+const GESTURE_HIST_LEN = 5;
+let gestureHistory = [];
+
+// Returns true if a finger is extended (curled = not extended)
+function fingerExtended(lm, tipIdx, pipIdx, mcpIdx) {
+  const tip = lm[tipIdx];
+  const pip = lm[pipIdx];
+  const mcp = lm[mcpIdx];
+  const wrist = lm[0];
+
+  // Multiple criteria for robustness
+  const tipAbovePip = tip.y < pip.y - 0.01;
+  const tipAboveMcp = tip.y < mcpY(mcp, wrist);
+  const tipFurtherFromWrist = dist2D(tip, wrist) > dist2D(pip, wrist) * 0.95;
+
+  const count = (tipAbovePip ? 1 : 0) + (tipAboveMcp ? 1 : 0) + (tipFurtherFromWrist ? 1 : 0);
+  return count >= 2;
+}
+
+// Adaptive MCP threshold: when wrist is above MCP, hand is likely inverted
+function mcpY(mcp, wrist) {
+  return Math.min(mcp.y, wrist.y - 0.02);
+}
+
+function dist2D(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+
+function thumbExtended(lm) {
+  const palmCenterX = (lm[0].x + lm[9].x) / 2;
+  const tipDist = Math.abs(lm[4].x - palmCenterX);
+  const ipDist  = Math.abs(lm[3].x - palmCenterX);
+  return tipDist > ipDist * 1.1;
+}
+
+function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+
+// Detect fist: all fingers curled
+function isFist(lm) {
+  const indexUp   = fingerExtended(lm, 8, 6, 5);
+  const middleUp  = fingerExtended(lm, 12, 10, 9);
+  const ringUp    = fingerExtended(lm, 16, 14, 13);
+  const pinkyUp   = fingerExtended(lm, 20, 18, 17);
+  const thumbUp   = thumbExtended(lm);
+
+  // Fist: most fingers curled (allow 1 finger exception for tolerance)
+  const curledCount = [!indexUp, !middleUp, !ringUp, !pinkyUp].filter(Boolean).length;
+  return curledCount >= 3 && !indexUp && !middleUp;
+}
+
+function detectGesture(lm) {
+  const indexUp   = fingerExtended(lm, 8, 6, 5);
+  const middleUp  = fingerExtended(lm, 12, 10, 9);
+  const ringUp    = fingerExtended(lm, 16, 14, 13);
+  const pinkyUp   = fingerExtended(lm, 20, 18, 17);
+  const thumbUp   = thumbExtended(lm);
+
+  // Update debug panel
+  if (dbgIndex)  { dbgIndex.textContent  = indexUp  ? '✓' : '✗'; dbgIndex.className  = 'val ' + (indexUp  ? 'on' : 'off'); }
+  if (dbgMiddle) { dbgMiddle.textContent = middleUp ? '✓' : '✗'; dbgMiddle.className = 'val ' + (middleUp ? 'on' : 'off'); }
+  if (dbgRing)   { dbgRing.textContent   = ringUp   ? '✓' : '✗'; dbgRing.className   = 'val ' + (ringUp   ? 'on' : 'off'); }
+  if (dbgPinky)  { dbgPinky.textContent  = pinkyUp  ? '✓' : '✗'; dbgPinky.className  = 'val ' + (pinkyUp  ? 'on' : 'off'); }
+
+  const fist = isFist(lm);
+  if (fist) return 'erase';
+
+  // Draw: only index finger extended
+  if (indexUp && !middleUp && !ringUp && !pinkyUp) return 'draw';
+
+  // Hover: two or more fingers extended (not all)
+  if (indexUp && middleUp) return 'hover';
+
+  return 'none';
+}
+
+function stabilizeGesture(g) {
+  gestureHistory.push(g);
+  if (gestureHistory.length > GESTURE_HIST_LEN) gestureHistory.shift();
+  const counts = {};
+  for (const x of gestureHistory) counts[x] = (counts[x] || 0) + 1;
+  let best = g, bestC = 0;
+  for (const [k, v] of Object.entries(counts)) { if (v > bestC) { bestC = v; best = k; } }
+  return bestC >= 3 ? best : null;
+}
+
+function updateGestureUI(gesture) {
+  if (!gestureIcon) return;
+  switch (gesture) {
+    case 'draw':
+      gestureIcon.textContent = '✏️';
+      gestureLabel.textContent = '画图中';
+      gestureLabel.style.color = '#4ade80';
+      gestureDetail.textContent = '';
+      break;
+    case 'hover':
+      gestureIcon.textContent = '☝️';
+      gestureLabel.textContent = '悬停';
+      gestureLabel.style.color = '#60a5fa';
+      gestureDetail.textContent = '(伸出两指)';
+      break;
+    case 'erase':
+      gestureIcon.textContent = '✊';
+      gestureLabel.textContent = '橡皮擦';
+      gestureLabel.style.color = '#f87171';
+      gestureDetail.textContent = '(握拳)';
+      break;
+    default:
+      gestureIcon.textContent = '✋';
+      gestureLabel.textContent = '等待手势';
+      gestureLabel.style.color = 'rgba(255,255,255,0.5)';
+      gestureDetail.textContent = '';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Overlay: Enhanced hand visualization
+// ═══════════════════════════════════════════════════════════
+const HAND_CONNECTIONS = [
+  [0,1],[1,2],[2,3],[3,4],
+  [0,5],[5,6],[6,7],[7,8],
+  [5,9],[9,10],[10,11],[11,12],
+  [9,13],[13,14],[14,15],[15,16],
+  [13,17],[17,18],[18,19],[19,20],
+  [0,17]
+];
+
+// Finger tip and PIP indices for highlighting
+const FINGER_TIPS = [4, 8, 12, 16, 20];
+const FINGER_PIPS = [3, 6, 10, 14, 18];
+
+function drawOverlay(landmarks, gesture) {
+  overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+  if (!landmarks) return;
+  const W = overlayCanvas.width, H = overlayCanvas.height;
+  const px = lm => ({ x: (1 - lm.x) * W, y: lm.y * H });
+
+  // ── 1. Glow effect for bones ──
+  overlayCtx.save();
+  overlayCtx.shadowColor = gesture === 'erase' ? 'rgba(248,113,113,0.8)' :
+                            gesture === 'draw' ? 'rgba(74,222,128,0.8)' :
+                            'rgba(167,139,250,0.6)';
+  overlayCtx.shadowBlur = 12;
+  overlayCtx.strokeStyle = gesture === 'erase' ? 'rgba(248,113,113,0.7)' :
+                             gesture === 'draw' ? 'rgba(74,222,128,0.7)' :
+                             'rgba(167,139,250,0.5)';
+  overlayCtx.lineWidth = 3;
+  for (const [a, b] of HAND_CONNECTIONS) {
+    const pa = px(landmarks[a]), pb = px(landmarks[b]);
+    overlayCtx.beginPath();
+    overlayCtx.moveTo(pa.x, pa.y);
+    overlayCtx.lineTo(pb.x, pb.y);
+    overlayCtx.stroke();
+  }
+  overlayCtx.restore();
+
+  // ── 2. Solid bone lines on top ──
+  overlayCtx.strokeStyle = gesture === 'erase' ? 'rgba(248,113,113,0.9)' :
+                             gesture === 'draw' ? 'rgba(74,222,128,0.9)' :
+                             'rgba(167,139,250,0.6)';
+  overlayCtx.lineWidth = 2;
+  for (const [a, b] of HAND_CONNECTIONS) {
+    const pa = px(landmarks[a]), pb = px(landmarks[b]);
+    overlayCtx.beginPath();
+    overlayCtx.moveTo(pa.x, pa.y);
+    overlayCtx.lineTo(pb.x, pb.y);
+    overlayCtx.stroke();
+  }
+
+  // ── 3. Joint points with glow ──
+  for (let i = 0; i < landmarks.length; i++) {
+    const p = px(landmarks[i]);
+    const isTip = FINGER_TIPS.includes(i);
+    const isPip = FINGER_PIPS.includes(i);
+
+    if (isTip) {
+      // Glowing tip points
+      overlayCtx.save();
+      const tipColor = gesture === 'erase' ? '#f87171' :
+                        gesture === 'draw' ? '#4ade80' : '#a78bfa';
+      overlayCtx.shadowColor = tipColor;
+      overlayCtx.shadowBlur = 16;
+      overlayCtx.beginPath();
+      overlayCtx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+      overlayCtx.fillStyle = tipColor;
+      overlayCtx.fill();
+      overlayCtx.restore();
+
+      // White inner dot
+      overlayCtx.beginPath();
+      overlayCtx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+      overlayCtx.fillStyle = '#fff';
+      overlayCtx.fill();
+
+      // Finger state label
+      const indexUp   = fingerExtended(landmarks, 8, 6, 5);
+      const middleUp  = fingerExtended(landmarks, 12, 10, 9);
+      const ringUp    = fingerExtended(landmarks, 16, 14, 13);
+      const pinkyUp   = fingerExtended(landmarks, 20, 18, 17);
+      const thumbUp   = thumbExtended(landmarks);
+
+      const fingerStates = {
+        4:  thumbUp,
+        8:  indexUp,
+        12: middleUp,
+        16: ringUp,
+        20: pinkyUp,
+      };
+
+      if (fingerStates[i] !== undefined) {
+        overlayCtx.save();
+        overlayCtx.font = 'bold 10px sans-serif';
+        overlayCtx.textAlign = 'center';
+        overlayCtx.fillStyle = fingerStates[i] ? '#4ade80' : '#f87171';
+        const labelY = i === 4 ? p.y - 16 : p.y - 14;
+        overlayCtx.fillText(fingerStates[i] ? '↑' : '↓', p.x, labelY);
+        overlayCtx.restore();
+      }
+    } else if (isPip) {
+      // PIP joints: medium size
+      overlayCtx.beginPath();
+      overlayCtx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+      overlayCtx.fillStyle = 'rgba(255,255,255,0.7)';
+      overlayCtx.fill();
+    } else {
+      // Regular joints: small dots
+      overlayCtx.beginPath();
+      overlayCtx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+      overlayCtx.fillStyle = 'rgba(255,255,255,0.4)';
+      overlayCtx.fill();
+    }
+  }
+
+  // ── 4. Cursor circle at index tip ──
+  const tip = px(landmarks[8]);
+  const cursorSize = gesture === 'draw' ? state.brushSize + 8 :
+                      gesture === 'erase' ? state.brushSize * 3 + 8 : 22;
+  cursor.style.display = 'block';
+  cursor.style.left = tip.x + 'px';
+  cursor.style.top  = tip.y + 'px';
+  cursor.style.width  = cursorSize + 'px';
+  cursor.style.height = cursorSize + 'px';
+
+  if (gesture === 'erase') {
+    cursor.style.borderColor = '#f87171';
+    cursor.style.borderStyle = 'dashed';
+  } else {
+    cursor.style.borderColor = state.color;
+    cursor.style.borderStyle = 'solid';
+  }
+  cursor.classList.toggle('drawing', gesture === 'draw');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MediaPipe onResults
+// ═══════════════════════════════════════════════════════════
+let prevGesture = 'none';
+
+function onResults(results) {
+  overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+  if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+    cursor.style.display = 'none';
+    if (state.isDrawing) { state.isDrawing = false; state.lastX = null; state.lastY = null; }
+    gestureHistory = [];
+    updateGestureUI('none');
+    if (dbgIndex)  { dbgIndex.textContent = '—'; dbgIndex.className = 'val'; }
+    if (dbgMiddle) { dbgMiddle.textContent = '—'; dbgMiddle.className = 'val'; }
+    if (dbgRing)   { dbgRing.textContent = '—'; dbgRing.className = 'val'; }
+    if (dbgPinky)  { dbgPinky.textContent = '—'; dbgPinky.className = 'val'; }
+    if (dbgGesture) { dbgGesture.textContent = '—'; dbgGesture.className = 'val'; }
+    return;
+  }
+
+  const landmarks = results.multiHandLandmarks[0];
+  const rawGesture = detectGesture(landmarks);
+  const gesture = stabilizeGesture(rawGesture) || prevGesture;
+
+  // Update debug gesture
+  if (dbgGesture) { dbgGesture.textContent = gesture; dbgGesture.className = 'val'; }
+
+  const W = drawCanvas.width, H = drawCanvas.height;
+  const tip = landmarks[8];
+  const x = (1 - tip.x) * W;
+  const y = tip.y * H;
+
+  updateGestureUI(gesture);
+
+  // Sync eraser mode from gesture
+  if (gesture === 'erase') {
+    setMode('eraser');
+  } else if (gesture === 'draw' && !stickerState.active) {
+    setMode('brush');
+  }
+
+  // Gesture drawing (only when not placing sticker)
+  if (!stickerState.active) {
+    if ((gesture === 'draw' || gesture === 'erase') && (state.mode === 'brush' || state.mode === 'eraser')) {
+      if (!state.isDrawing) {
+        saveUndoState();
+        state.isDrawing = true;
+        drawLine(x, y, true);
+      } else {
+        drawLine(x, y, false);
+      }
+    } else {
+      if (state.isDrawing) { state.isDrawing = false; state.lastX = null; state.lastY = null; }
+    }
+  }
+
+  drawOverlay(landmarks, gesture);
+  prevGesture = gesture;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Init MediaPipe
+// ═══════════════════════════════════════════════════════════
+async function init() {
+  loadingMsg.textContent = '正在加载手部追踪模型…';
+
+  const hands = new Hands({
+    locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+  });
+
+  hands.setOptions({
+    maxNumHands: 1,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5,
+  });
+
+  hands.onResults(onResults);
+
+  loadingMsg.textContent = '正在请求摄像头权限…';
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: 1280, height: 720 }
+    });
+    video.srcObject = stream;
+    await new Promise(res => { video.onloadedmetadata = res; });
+
+    loadingMsg.textContent = '摄像头就绪，启动追踪…';
+
+    const camera = new Camera(video, {
+      onFrame: async () => { await hands.send({ image: video }); },
+      width: 1280, height: 720,
+    });
+
+    await camera.start();
+
+    loadingOverlay.classList.add('hidden');
+    statusDot.className = 'ready';
+    statusText.textContent = '追踪中';
+
+    setTimeout(() => { gestureHint.style.opacity = '0'; }, 10000);
+
+  } catch (err) {
+    loadingOverlay.classList.add('hidden');
+    statusDot.style.background = '#f59e0b';
+    statusText.textContent = '仅鼠标模式';
+    gestureHint.querySelector('span:nth-child(2)').textContent = '⚠️ 摄像头不可用';
+    console.warn('Camera not available, mouse-only mode:', err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  UI controls
+// ═══════════════════════════════════════════════════════════
+
+// Color swatches
+document.querySelectorAll('.swatch').forEach(sw => {
+  sw.addEventListener('click', () => {
+    document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+    sw.classList.add('active');
+    state.color = sw.dataset.color;
+    colorInput.value = state.color;
+  });
+});
+
+// Custom color
+document.getElementById('custom-color-btn').addEventListener('click', () => { colorInput.click(); });
+colorInput.addEventListener('input', () => {
+  state.color = colorInput.value;
+  document.getElementById('custom-color-btn').style.background = state.color;
+  document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+});
+
+// Brush size
+brushSizeInput.addEventListener('input', () => {
+  state.brushSize = parseInt(brushSizeInput.value);
+  brushDot.style.width  = state.brushSize + 'px';
+  brushDot.style.height = state.brushSize + 'px';
+});
+
+// Clear
+clearBtn.addEventListener('click', () => {
+  saveUndoState();
+  drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+});
+
+// Camera bg toggle
+let camVisible = false;
+camToggleBtn.addEventListener('click', () => {
+  camVisible = !camVisible;
+  video.classList.toggle('visible', camVisible);
+  camToggleBtn.classList.toggle('active', camVisible);
+  camToggleBtn.textContent = camVisible ? '🚫 隐藏' : '📷 摄像头';
+});
+
+// ═══════════════════════════════════════════════════════════
+//  Start
+// ═══════════════════════════════════════════════════════════
+init();
+</script>
+</body>
+</html>
