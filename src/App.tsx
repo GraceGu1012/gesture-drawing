@@ -29,12 +29,20 @@ export default function App() {
   const [shops, setShops] = useState<Shop[]>([]);
   const [perf, setPerf] = useState<ShopPerformance[]>([]);
   const [orders, setOrders] = useState<DailyOrder[]>([]);
+  const [validOrigin, setValidOrigin] = useState(true);
 
   // ── 数据管道：用户提取 → 数据加载 → 角色过滤 → 时间筛选 → KPI 聚合 ──
 
-  // 1. 从 Chrome storage 读取 ERP 注入的用户身份
+  // 1. 从 Chrome storage 读取 ERP 注入的用户身份 + 校验 ERP 域名
   useEffect(() => {
-    if (typeof chrome !== "undefined" && chrome.storage) {
+    if (typeof chrome !== "undefined" && chrome.tabs) {
+      // 检查当前标签页是否在竹亭 ERP 域名下
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        const url = tabs[0]?.url || "";
+        if (!url.startsWith("http://121.46.237.218:8071")) {
+          setValidOrigin(false);
+        }
+      });
       chrome.storage.local.get("erpUser", (result) => {
         if (result.erpUser) setUser(result.erpUser as UserContext);
         setUserReady(true);
@@ -122,6 +130,23 @@ export default function App() {
   const currentOrders = selectedShop
     ? orders.filter((o) => o.店铺 === selectedShop)
     : [];
+
+  if (!validOrigin) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen gap-3 px-4">
+        <div className="text-sm font-semibold text-slate-700">仅支持在竹亭销售系统内打开</div>
+        <a
+          href="http://121.46.237.218:8071/"
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs text-indigo-600 hover:text-indigo-800 underline"
+        >
+          http://121.46.237.218:8071/
+        </a>
+        <div className="text-xs text-slate-400">请先访问竹亭 ERP 后再打开插件</div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

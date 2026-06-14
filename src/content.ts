@@ -100,7 +100,7 @@ if (user) {
 
 // Listen for messages from side panel
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg.type === "GET_ERP_USER") {
+  if ((msg as { type?: string }).type === "GET_ERP_USER") {
     const u = extractUser();
     sendResponse(u);
   }

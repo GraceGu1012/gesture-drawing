@@ -3,12 +3,21 @@
   "name": "TikTok 店铺看板",
   "version": "0.1.0",
   "description": "TikTok 店铺运营数据看板",
-  "permissions": ["sidePanel", "storage"],
-  "host_permissions": ["http://121.46.237.218:8071/*"],
+  "permissions": [
+    "sidePanel",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://121.46.237.218:8071/*"
+  ],
   "content_scripts": [
     {
-      "matches": ["http://121.46.237.218:8071/*"],
-      "js": ["src/content.ts"],
+      "matches": [
+        "http://121.46.237.218:8071/*"
+      ],
+      "js": [
+        "src/content.ts"
+      ],
       "run_at": "document_idle"
     }
   ],
@@ -17,5 +26,9 @@
   },
   "action": {
     "default_title": "TikTok 店铺看板"
+  },
+  "background": {
+    "service_worker": "src/background.ts",
+    "type": "module"
   }
 }
