@@ -16,6 +16,15 @@ const RATES: Record<string, number> = {
  *            ₱1,682.58  (PHP)    ₫8,092     (VND — ERP/performance)
  *   Suffix:  44.563₫    (VND — daily_orders, dot=thousands-sep)
  */
+/**
+ * 解析 GMV 字符串，自动识别币种并换算为人民币。
+ *
+ * 支持的格式：
+ *   前缀型：฿1,072.87 (THB)  RM455.51 (MYR)  ₱1,682.58 (PHP)  ₫8,092 (VND)
+ *   后缀型：44.563₫ (VND — daily_orders 格式，点号=千分位)
+ *
+ * VND 特殊处理：越南盾格式中 . 为千分位而非小数点，需先去除再解析。
+ */
 export function parseGmv(raw: string): number {
   let s = raw.trim();
   if (!s) return 0;

@@ -28,7 +28,7 @@ function parseNum(s: string): number {
 export default function Overview({ kpi, orders, perf, shops, onShopClick, viewMode }: Props) {
   const [panel, setPanel] = useState<PanelState | null>(null);
 
-  /* ---- derived stats ---- */
+  /* ---- 派生统计：从 performance 和 shops 预计算各种分组 ── */
   const violationOver10 = useMemo(
     () => perf.filter((p) => parseNum(p["店铺表现-违规分(目标＜12)"]) > 10),
     [perf]
@@ -78,7 +78,7 @@ export default function Overview({ kpi, orders, perf, shops, onShopClick, viewMo
     return buckets;
   }, [perf]);
 
-  /* ---- Group / Dept aggregation ---- */
+  /* ---- 集团 / 部门维度聚合：按组织层级汇总 GMV 和订单 ── */
   const groupRanking = useMemo(() => {
     const map = new Map<string, { gmv: number; orders: number; depts: Set<string> }>();
     for (const o of orders) {
@@ -112,7 +112,7 @@ export default function Overview({ kpi, orders, perf, shops, onShopClick, viewMo
       .sort((a, b) => b.gmv - a.gmv);
   }, [orders, shops]);
 
-  /* ---- Panel helpers (sorted by value descending) ---- */
+  /* ---- 下钻面板辅助函数：将预计算的分组数据转为全屏列表，按值降序 ── */
   function openPerfPanel(title: string, list: ShopPerformance[], valueKey?: (p: ShopPerformance) => string) {
     let items = list.map((p) => ({
       name: p.店铺名,
@@ -143,6 +143,7 @@ export default function Overview({ kpi, orders, perf, shops, onShopClick, viewMo
   const orderChange = changePct(kpi.todayOrders, kpi.yesterdayOrders);
   const visitorChange = changePct(kpi.todayVisitors, kpi.yesterdayVisitors);
 
+  // 转化率 = 下单用户数 / 访客数 × 100%
   const todayCvr = kpi.todayVisitors > 0
     ? ((kpi.todayBuyers / kpi.todayVisitors) * 100).toFixed(1) + "%"
     : "-";

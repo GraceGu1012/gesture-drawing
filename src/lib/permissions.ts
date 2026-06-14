@@ -20,7 +20,9 @@ export function filterShops(shops: Shop[], user: UserContext): Shop[] {
   }
 }
 
-/** 获取当前用户可见的店铺名集合 */
+/** 获取当前用户可见的店铺名集合。
+ *  注意：shops 表用「店铺名称」字段，performance 表用「店铺名」字段，
+ *  daily_orders 表用「店铺」字段，三者需对齐后做集合匹配。 */
 function visibleShopNames(shops: Shop[], user: UserContext): Set<string> {
   return new Set(filterShops(shops, user).map((s) => s.店铺名称));
 }

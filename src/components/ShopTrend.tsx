@@ -21,7 +21,7 @@ const METRICS: { key: Metric; label: string }[] = [
 export default function ShopTrend({ orders }: Props) {
   const [metric, setMetric] = useState<Metric>("gmv");
 
-  // Build data points: aggregate per day
+  // 按日聚合订单数据：将同一日期的多条记录合并为单个数据点
   const dayMap = new Map<string, { gmv: number; orders: number; visitors: number; buyers: number }>();
   for (const o of orders) {
     const date = (o.同步时间 || "").slice(0, 10) || "未知";
@@ -41,7 +41,7 @@ export default function ShopTrend({ orders }: Props) {
       visitors: v.visitors,
       cvr: v.visitors > 0 ? +(v.buyers / v.visitors * 100).toFixed(1) : 0,
     }))
-    .sort((a, b) => a.date.localeCompare(b.date));
+    .sort((a, b) => a.date.localeCompare(b.date)); // 按日期升序，确保折线图 X 轴正确
 
   if (data.length < 2) {
     return (
@@ -63,6 +63,7 @@ export default function ShopTrend({ orders }: Props) {
     <div>
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">日订单趋势</h3>
+        {/* 指标切换：GMV / 订单数 / 访客数 / 转化率 */}
         <div className="flex gap-0.5 bg-slate-100 rounded p-0.5">
           {METRICS.map((m) => (
             <button

@@ -75,6 +75,7 @@ def get_daily_orders(date: str = Query(None)):
     """Return deduplicated daily orders: last record per shop per day."""
     conn = get_conn()
     cur = conn.cursor()
+    # 去重：同一店铺同一天可能有多条记录，取最新的一条（按同步时间 DESC）
     base_sql = """
         SELECT * FROM (
             SELECT *, ROW_NUMBER() OVER (
@@ -116,6 +117,7 @@ def get_overview(date: str = Query(None)):
 
     RATES = {"THB": 0.20, "MYR": 1.55, "VND": 0.00029, "PHP": 0.13}
 
+    # 多币种 GMV 解析（与前端 aggregator.ts 逻辑一致，需保持同步）
     def parse_gmv(raw):
         if not raw: return 0
         s = raw.strip()

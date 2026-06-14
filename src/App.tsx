@@ -30,6 +30,9 @@ export default function App() {
   const [perf, setPerf] = useState<ShopPerformance[]>([]);
   const [orders, setOrders] = useState<DailyOrder[]>([]);
 
+  // ── 数据管道：用户提取 → 数据加载 → 角色过滤 → 时间筛选 → KPI 聚合 ──
+
+  // 1. 从 Chrome storage 读取 ERP 注入的用户身份
   useEffect(() => {
     if (typeof chrome !== "undefined" && chrome.storage) {
       chrome.storage.local.get("erpUser", (result) => {
@@ -41,6 +44,7 @@ export default function App() {
     }
   }, []);
 
+  // 2. 数据加载（当前从 PostgreSQL API 或本地 JSON 获取）
   useEffect(() => {
     if (!userReady) return;
     loadAllData().then((data) => {
@@ -51,7 +55,7 @@ export default function App() {
     });
   }, [userReady]);
 
-  // Determine latest date from orders
+  // 从订单数据中提取最近日期，用于时间范围过滤的锚点
   const latestDate = useMemo(() => {
     const dates = orders
       .map((o) => (o.同步时间 || "").slice(0, 10))
@@ -60,6 +64,7 @@ export default function App() {
     return dates.sort().reverse()[0];
   }, [orders]);
 
+  // 3. 角色权限过滤 → 级联筛选 → 时间范围过滤
   const roleShops = useMemo(() => filterShops(shops, user), [shops, user]);
 
   const filteredShops = useMemo(() => {

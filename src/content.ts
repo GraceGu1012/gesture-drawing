@@ -8,6 +8,16 @@ interface ErpUser {
   team: string;
 }
 
+/**
+ * 从 ERP 页面提取当前登录用户信息。
+ *
+ * 提取策略（按优先级依次尝试）：
+ *   1. localStorage 中查找常见用户键（user / userInfo / currentUser 等）
+ *   2. sessionStorage 中查找
+ *   3. DOM 中查找用户信息元素（.user-name / .avatar-name 等）
+ *
+ * 提取后用 normalizeUser 映射到 UserContext 结构。
+ */
 function extractUser(): ErpUser | null {
   // Strategy 1: check localStorage for common keys
   const storageKeys = ["user", "userInfo", "currentUser", "loginUser", "userData"];
