@@ -9,6 +9,9 @@ interface ErpUser {
 }
 
 const ERP_API_USER = "/Api/api-user/users/getUser";
+/** 管理员白名单 — 这些用户的角色强制设为 admin */
+const ADMIN_NAMES = new Set(["蔡珺"]);
+
 
 /**
  * 从 ERP 页面提取当前登录用户信息。
@@ -93,6 +96,9 @@ function normalizeUser(data: Record<string, unknown>): ErpUser | null {
   const group = String(data.group || data.groupName || data.集团 || "").trim();
   const department = String(data.department || data.dept || data.deptName || data.部门 || "").trim();
   const team = String(data.team || data.teamName || data.小组 || "").trim();
+
+  // 白名单用户强制设为管理员
+  if (ADMIN_NAMES.has(name)) role = "admin";
 
   return { name, role, group, department, team };
 }

@@ -8,7 +8,8 @@
     "storage"
   ],
   "host_permissions": [
-    "http://121.46.237.218:8071/*"
+    "http://121.46.237.218:8071/*",
+    "http://localhost:8000/*"
   ],
   "content_scripts": [
     {

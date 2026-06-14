@@ -5,11 +5,16 @@ import { filterShops, filterDailyOrders, filterPerformance } from "./lib/permiss
 import { computeKpi } from "./lib/aggregator";
 import Overview from "./pages/Overview";
 import ShopDetail from "./pages/ShopDetail";
-import RoleSwitcher from "./components/RoleSwitcher";
 import FilterBar from "./components/FilterBar";
 
 /** 最小默认用户 — ERP 内容脚本注入前使用。真实用户由 content.ts 从 ERP 页面提取 */
 const DEFAULT_USER: UserContext = { name: "管理员", role: "admin", group: "", department: "", team: "" };
+const ROLE_LABELS: Record<string, string> = {
+  admin: "管理员",
+  dept_head: "部门负责人",
+  team_lead: "组长",
+  seller: "销售",
+};
 
 type ViewMode = "shop" | "group" | "dept";
 
@@ -55,12 +60,17 @@ export default function App() {
   // 2. 数据加载（当前从 PostgreSQL API 或本地 JSON 获取）
   useEffect(() => {
     if (!userReady) return;
-    loadAllData().then((data) => {
-      setShops(data.shops);
-      setPerf(data.perf);
-      setOrders(data.orders);
-      setLoading(false);
-    });
+    loadAllData()
+      .then((data) => {
+        setShops(data.shops);
+        setPerf(data.perf);
+        setOrders(data.orders);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error("数据加载失败:", err);
+        setLoading(false);
+      });
   }, [userReady]);
 
   // 从订单数据中提取最近日期，用于时间范围过滤的锚点
@@ -173,11 +183,12 @@ export default function App() {
     <div className="p-4 space-y-3">
       <div className="flex items-center justify-between">
         <h1 className="text-base font-bold text-slate-800">TikTok 店铺看板</h1>
-        <RoleSwitcher
-          users={[DEFAULT_USER]}
-          current={user}
-          onChange={setUser}
-        />
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-slate-500">{user.name}</span>
+          <span className="bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded text-[10px] font-medium">
+            {ROLE_LABELS[user.role] || user.role}
+          </span>
+        </div>
       </div>
 
       <FilterBar
