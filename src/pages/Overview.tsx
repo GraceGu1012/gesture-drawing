@@ -4,6 +4,7 @@ import { changePct, formatGmv, formatLargeNum, parseGmv } from "../lib/aggregato
 import KpiCard from "../components/KpiCard";
 import ShopRanking from "../components/ShopRanking";
 import ShopListPanel from "../components/ShopListPanel";
+import KpiTrend from "../components/KpiTrend";
 
 interface Props {
   kpi: KpiSnapshot | null;
@@ -186,67 +187,12 @@ export default function Overview({ kpi, orders, perf, shops, onShopClick, viewMo
         </div>
       </div>
 
-      {/* ── 考核健康 ── */}
-      <div>
-        <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">考核健康</h2>
-        <div className="grid grid-cols-3 gap-2">
-          <button onClick={() => openPerfPanel("达标店铺", perf.filter((p) => p.达标数?.startsWith("6")))}
-            className="bg-white rounded-lg border border-slate-200 p-3 text-center hover:border-indigo-300 transition-colors">
-            <div className="text-lg font-bold text-emerald-600">{qualifiedPct}</div>
-            <div className="text-xs text-slate-500">达标率</div>
-            <div className="text-xs text-slate-400">{kpi.qualifiedCount}/{kpi.totalCount} 店</div>
-          </button>
-          <button onClick={() => openPerfPanel("差评率",
-            [...perf].sort((a,b) => parseNum(b["店铺表现-商责店铺差评率(目标值＜5%)"]) - parseNum(a["店铺表现-商责店铺差评率(目标值＜5%)"])),
-            (p) => p["店铺表现-商责店铺差评率(目标值＜5%)"])}
-            className="bg-white rounded-lg border border-slate-200 p-3 text-center hover:border-indigo-300 transition-colors">
-            <div className="text-lg font-bold text-amber-500">{kpi.avgBadReviewRate}%</div>
-            <div className="text-xs text-slate-500">差评率</div>
-            <div className="text-xs text-slate-400">
-              {perf.filter((p) => parseFloat(p["店铺表现-商责店铺差评率(目标值＜5%)"]) > 0.4).length} 店超标
-            </div>
-          </button>
-          <button onClick={() => openPerfPanel("违规分",
-            [...violationOver10].sort((a,b) => parseNum(b["店铺表现-违规分(目标＜12)"]) - parseNum(a["店铺表现-违规分(目标＜12)"])),
-            (p) => p["店铺表现-违规分(目标＜12)"])}
-            className="bg-white rounded-lg border border-slate-200 p-3 text-center hover:border-indigo-300 transition-colors">
-            <div className="text-lg font-bold text-slate-700">{kpi.avgViolationScore}</div>
-            <div className="text-xs text-slate-500">违规分</div>
-            <div className="text-xs text-slate-400">{violationOver10.length} 店 &gt;10</div>
-          </button>
-        </div>
-      </div>
+      {/* ── 核心指标趋势（仅 7 天 / 30 天视图） ── */}
+      {timeRange !== "today" && (
+        <KpiTrend orders={orders} />
+      )}
 
-      {/* ── 风险预警 ── */}
-      <div>
-        <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">风险预警</h2>
-        <div className="grid grid-cols-2 gap-2">
-          <button onClick={() => openPerfPanel("违规分 > 10",
-            [...violationOver10].sort((a,b) => parseNum(b["店铺表现-违规分(目标＜12)"]) - parseNum(a["店铺表现-违规分(目标＜12)"])),
-            (p) => p["店铺表现-违规分(目标＜12)"])}
-            className="bg-white rounded-lg border border-slate-200 p-3 hover:border-indigo-300 transition-colors text-left">
-            <div className="text-lg font-bold text-red-500">{violationOver10.length}</div>
-            <div className="text-xs text-slate-500">违规分 &gt; 10</div>
-          </button>
-          <button onClick={() => openPerfPanel("销量未达标", salesNotMet)}
-            className="bg-white rounded-lg border border-slate-200 p-3 hover:border-indigo-300 transition-colors text-left">
-            <div className="text-lg font-bold text-red-500">{salesNotMet.length}</div>
-            <div className="text-xs text-slate-500">销量未达标</div>
-          </button>
-          <button onClick={() => openPerfPanel("去重客户未达标", customerNotMet)}
-            className="bg-white rounded-lg border border-slate-200 p-3 hover:border-indigo-300 transition-colors text-left">
-            <div className="text-lg font-bold text-red-500">{customerNotMet.length}</div>
-            <div className="text-xs text-slate-500">去重客户未达标</div>
-          </button>
-          <button onClick={() => openPerfPanel("违规积分未达标", violationScoreNotMet)}
-            className="bg-white rounded-lg border border-slate-200 p-3 hover:border-indigo-300 transition-colors text-left">
-            <div className="text-lg font-bold text-red-500">{violationScoreNotMet.length}</div>
-            <div className="text-xs text-slate-500">违规积分未达标</div>
-          </button>
-        </div>
-      </div>
-
-      {/* ── 7日均单分布 ── */}
+      {/* ── 最近7日均单分布 ── */}
       <div>
         <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">最近7日均单分布</h2>
         <div className="grid grid-cols-4 gap-1.5">
@@ -260,32 +206,6 @@ export default function Overview({ kpi, orders, perf, shops, onShopClick, viewMo
               <div className="text-xs text-slate-500">{b.label}</div>
             </button>
           ))}
-        </div>
-      </div>
-
-      {/* ── 店铺大小（压缩） ── */}
-      <div>
-        <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">店铺大小</h2>
-        <div className="flex gap-2">
-          {sizeBuckets.map(([size, names]) => (
-            <button key={size} onClick={() => openShopPanel(size, names)}
-              className="flex-1 bg-white rounded border border-slate-200 py-1.5 px-2 hover:border-indigo-300 transition-colors text-center">
-              <span className="text-xs font-bold text-slate-700">{names.length}</span>
-              <span className="text-[10px] text-slate-500 ml-1">{size}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── 刊登 ── */}
-      <div>
-        <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">刊登</h2>
-        <div className="grid grid-cols-2 gap-2">
-          <button onClick={() => openShopPanel("刊登使用率 < 50%", lowListingShops)}
-            className="bg-white rounded-lg border border-slate-200 p-3 hover:border-indigo-300 transition-colors text-left">
-            <div className="text-lg font-bold text-amber-500">{lowListingShops.length}</div>
-            <div className="text-xs text-slate-500">使用率 &lt; 50%</div>
-          </button>
         </div>
       </div>
 
@@ -330,6 +250,93 @@ export default function Overview({ kpi, orders, perf, shops, onShopClick, viewMo
           </div>
         </div>
       )}
+
+      {/* ── 店铺大小（压缩） ── */}
+      <div>
+        <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">店铺大小</h2>
+        <div className="flex gap-2">
+          {sizeBuckets.map(([size, names]) => (
+            <button key={size} onClick={() => openShopPanel(size, names)}
+              className="flex-1 bg-white rounded border border-slate-200 py-1.5 px-2 hover:border-indigo-300 transition-colors text-center">
+              <span className="text-xs font-bold text-slate-700">{names.length}</span>
+              <span className="text-[10px] text-slate-500 ml-1">{size}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── 刊登 ── */}
+      <div>
+        <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">刊登</h2>
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={() => openShopPanel("刊登使用率 < 50%", lowListingShops)}
+            className="bg-white rounded-lg border border-slate-200 p-3 hover:border-indigo-300 transition-colors text-left">
+            <div className="text-lg font-bold text-amber-500">{lowListingShops.length}</div>
+            <div className="text-xs text-slate-500">使用率 &lt; 50%</div>
+          </button>
+        </div>
+      </div>
+
+      {/* ── 考核健康 ── */}
+      <div>
+        <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">考核健康</h2>
+        <div className="grid grid-cols-3 gap-2">
+          <button onClick={() => openPerfPanel("达标店铺", perf.filter((p) => p.达标数?.startsWith("6")), (p) => p.达标数 || "-")}
+            className="bg-white rounded-lg border border-slate-200 p-3 text-center hover:border-indigo-300 transition-colors">
+            <div className="text-lg font-bold text-emerald-600">{qualifiedPct}</div>
+            <div className="text-xs text-slate-500">达标率</div>
+            <div className="text-xs text-slate-400">{kpi.qualifiedCount}/{kpi.totalCount} 店</div>
+          </button>
+          <button onClick={() => openPerfPanel("差评率",
+            [...perf].sort((a,b) => parseNum(b["店铺表现-商责店铺差评率(目标值＜5%)"]) - parseNum(a["店铺表现-商责店铺差评率(目标值＜5%)"])),
+            (p) => p["店铺表现-商责店铺差评率(目标值＜5%)"])}
+            className="bg-white rounded-lg border border-slate-200 p-3 text-center hover:border-indigo-300 transition-colors">
+            <div className="text-lg font-bold text-amber-500">{kpi.avgBadReviewRate}%</div>
+            <div className="text-xs text-slate-500">差评率</div>
+            <div className="text-xs text-slate-400">
+              {perf.filter((p) => parseFloat(p["店铺表现-商责店铺差评率(目标值＜5%)"]) > 0.4).length} 店超标
+            </div>
+          </button>
+          <button onClick={() => openPerfPanel("违规分",
+            [...violationOver10].sort((a,b) => parseNum(b["店铺表现-违规分(目标＜12)"]) - parseNum(a["店铺表现-违规分(目标＜12)"])),
+            (p) => p["店铺表现-违规分(目标＜12)"])}
+            className="bg-white rounded-lg border border-slate-200 p-3 text-center hover:border-indigo-300 transition-colors">
+            <div className="text-lg font-bold text-slate-700">{kpi.avgViolationScore}</div>
+            <div className="text-xs text-slate-500">违规分</div>
+            <div className="text-xs text-slate-400">{violationOver10.length} 店 &gt;10</div>
+          </button>
+        </div>
+      </div>
+
+      {/* ── 风险预警 ── */}
+      <div>
+        <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">风险预警</h2>
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={() => openPerfPanel("违规分 > 10",
+            [...violationOver10].sort((a,b) => parseNum(b["店铺表现-违规分(目标＜12)"]) - parseNum(a["店铺表现-违规分(目标＜12)"])),
+            (p) => p["店铺表现-违规分(目标＜12)"])}
+            className="bg-white rounded-lg border border-slate-200 p-3 hover:border-indigo-300 transition-colors text-left">
+            <div className="text-lg font-bold text-red-500">{violationOver10.length}</div>
+            <div className="text-xs text-slate-500">违规分 &gt; 10</div>
+          </button>
+          <button onClick={() => openPerfPanel("销量未达标", salesNotMet, (p) => p.销售金额当前值 || "-")}
+            className="bg-white rounded-lg border border-slate-200 p-3 hover:border-indigo-300 transition-colors text-left">
+            <div className="text-lg font-bold text-red-500">{salesNotMet.length}</div>
+            <div className="text-xs text-slate-500">销量未达标</div>
+          </button>
+          <button onClick={() => openPerfPanel("去重客户未达标", customerNotMet)}
+            className="bg-white rounded-lg border border-slate-200 p-3 hover:border-indigo-300 transition-colors text-left">
+            <div className="text-lg font-bold text-red-500">{customerNotMet.length}</div>
+            <div className="text-xs text-slate-500">去重客户未达标</div>
+          </button>
+          <button onClick={() => openPerfPanel("违规积分未达标", violationScoreNotMet, (p) => p.当前违规分 || "-")}
+            className="bg-white rounded-lg border border-slate-200 p-3 hover:border-indigo-300 transition-colors text-left">
+            <div className="text-lg font-bold text-red-500">{violationScoreNotMet.length}</div>
+            <div className="text-xs text-slate-500">违规积分未达标</div>
+          </button>
+        </div>
+      </div>
+
     </div>
   );
 }
