@@ -26,7 +26,7 @@ function parseNum(s: string): number {
   return isNaN(n) ? 0 : n;
 }
 
-export default function Overview({ kpi, orders, perf, shops, onShopClick, viewMode }: Props) {
+export default function Overview({ kpi, orders, perf, shops, onShopClick, viewMode, timeRange }: Props) {
   const [panel, setPanel] = useState<PanelState | null>(null);
 
   /* ---- 派生统计：从 performance 和 shops 预计算各种分组 ── */
